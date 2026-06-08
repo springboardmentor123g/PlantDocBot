@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from sklearn.preprocessing import LabelEncoder
 import numpy as np
 from PIL import Image
 from torchvision import transforms
@@ -14,9 +13,6 @@ import io
 import os
 import zipfile
 import gdown
-
-
-#  FASTAPI APP CONFIGURATION
 
 app = FastAPI(title="Plant Disease Classifier API")
 
@@ -28,34 +24,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# TEXT CLASSIFIER SETUP & AUTO-DOWNLOAD FROM DRIVE
-
 MODEL_PATH = "best_plant_text_classifier"
 ZIP_FILE = "best_plant_text_classifier.zip"
-
-
-DRIVE_FILE_ID = "1rYemMnyjMKfadvdlWRBBiCT-D8xQhui-"
+DRIVE_FILE_ID = "1rYemMnyjMKfadvdlWRBBiCT-D8xQhui-" 
 
 if not os.path.exists(MODEL_PATH):
-    print("Downloading trained model from Google Drive...")
     url = f'https://drive.google.com/uc?id={DRIVE_FILE_ID}'
     gdown.download(url, ZIP_FILE, quiet=False)
-    
-    print("Unzipping model folder...")
     with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
         zip_ref.extractall(".")
     os.remove(ZIP_FILE)  
-    print("Model folder is ready!")
-
-ENCODER_PATH = f"{MODEL_PATH}/encoder_classes.npy"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 text_model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
 text_model.eval()
-
-encoder = LabelEncoder()
-encoder.classes_ = np.load(ENCODER_PATH, allow_pickle=True)
 
 with open("recommendations.json", "r") as f:
     recommendations = json.load(f)
@@ -71,7 +53,6 @@ def health_check():
 
 @app.post("/predict_text")
 def predict_text(input_data: TextInput):
-
     inputs = tokenizer(input_data.text, return_tensors="pt", truncation=True, padding=True)
 
     with torch.no_grad():
@@ -81,7 +62,11 @@ def predict_text(input_data: TextInput):
     pred_idx = torch.argmax(probs, dim=-1).item()
     confidence = probs[0][pred_idx].item()
 
-    pred_label = encoder.inverse_transform([pred_idx])[0].strip()
+    if hasattr(text_model.config, 'id2label') and pred_idx in text_model.config.id2label:
+        pred_label = text_model.config.id2label[pred_idx].strip()
+    else:
+        pred_label = str(pred_idx)
+
     rec = normalized_recommendations.get(pred_label.lower(), "No recommendation available.")
 
     return {
@@ -89,9 +74,6 @@ def predict_text(input_data: TextInput):
         "confidence": round(confidence * 100, 2),
         "recommendation": rec
     }
-
-
-#  IMAGE CLASSIFIER SETUP
 
 IMG_MODEL_PATH = "plant_cnn.pth"
 CLASS_MAPPING_PATH = "class_mapping.json"
@@ -137,10 +119,8 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-#IMAGE PREDICTION — ONLY TOP-1 OUTPUT
 @app.post("/predict_image")
 def predict_image(file: UploadFile = File(...)):
-
     image_bytes = file.file.read()
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img_tensor = transform(image).unsqueeze(0).to(device)
