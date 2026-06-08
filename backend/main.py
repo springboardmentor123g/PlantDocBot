@@ -11,10 +11,13 @@ from PIL import Image
 from torchvision import transforms
 import json
 import io
+import os
+import zipfile
+import gdown
 
-# ---------------------------------------------------------
-# ✅ FASTAPI APP CONFIGURATION
-# ---------------------------------------------------------
+
+#  FASTAPI APP CONFIGURATION
+
 app = FastAPI(title="Plant Disease Classifier API")
 
 app.add_middleware(
@@ -25,10 +28,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# ✅ TEXT CLASSIFIER SETUP
-# ---------------------------------------------------------
+
+# TEXT CLASSIFIER SETUP & AUTO-DOWNLOAD FROM DRIVE
+
 MODEL_PATH = "best_plant_text_classifier"
+ZIP_FILE = "best_plant_text_classifier.zip"
+
+
+DRIVE_FILE_ID = "1rYemMnyjMKfadvdlWRBBiCT-D8xQhui-"
+
+if not os.path.exists(MODEL_PATH):
+    print("Downloading trained model from Google Drive...")
+    url = f'https://drive.google.com/uc?id={DRIVE_FILE_ID}'
+    gdown.download(url, ZIP_FILE, quiet=False)
+    
+    print("Unzipping model folder...")
+    with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
+        zip_ref.extractall(".")
+    os.remove(ZIP_FILE)  
+    print("Model folder is ready!")
+
 ENCODER_PATH = f"{MODEL_PATH}/encoder_classes.npy"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
@@ -71,9 +90,9 @@ def predict_text(input_data: TextInput):
         "recommendation": rec
     }
 
-# ---------------------------------------------------------
-# ✅ IMAGE CLASSIFIER SETUP
-# ---------------------------------------------------------
+
+#  IMAGE CLASSIFIER SETUP
+
 IMG_MODEL_PATH = "plant_cnn.pth"
 CLASS_MAPPING_PATH = "class_mapping.json"
 
@@ -118,9 +137,7 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-# ---------------------------------------------------------
-# ✅ IMAGE PREDICTION — ONLY TOP-1 OUTPUT
-# ---------------------------------------------------------
+#IMAGE PREDICTION — ONLY TOP-1 OUTPUT
 @app.post("/predict_image")
 def predict_image(file: UploadFile = File(...)):
 
