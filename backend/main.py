@@ -8,18 +8,18 @@ from torchvision import transforms
 import json
 import io
 import os
+import gdown
 
 app = FastAPI(title="Plant Disease Classifier API (Image Only)")
 
 # CORS Middleware setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Frontend se connect karne ke liye ise "*" kar diya hai
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 with open("recommendations.json", "r") as f:
     recommendations = json.load(f)
@@ -30,6 +30,18 @@ CLASS_MAPPING_PATH = "class_mapping.json"
 
 with open(CLASS_MAPPING_PATH, "r") as f:
     idx_to_class = json.load(f)
+
+# === AUTOMATIC GOOGLE DRIVE DOWNLOAD ===
+if not os.path.exists(IMG_MODEL_PATH):
+    print("Model file nahi mili! Google Drive se download shuru ho raha hai...")
+    drive_file_id = "1eH56fBH0u5VgTkFRzloncErFnlMPQzuv"
+    download_url = f"https://drive.google.com/uc?id={drive_file_id}"
+    try:
+        gdown.download(download_url, IMG_MODEL_PATH, quiet=False)
+        print("Model successfully download ho gaya! 🎉")
+    except Exception as e:
+        print(f"Download fail ho gaya. Error: {e}")
+# =======================================
 
 # CNN Model Architecture
 class PlantCNN(nn.Module):
@@ -60,7 +72,6 @@ class PlantCNN(nn.Module):
         return x
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 img_model = PlantCNN(len(idx_to_class)).to(device)
 img_model.load_state_dict(torch.load(IMG_MODEL_PATH, map_location=device))
