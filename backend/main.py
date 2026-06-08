@@ -13,6 +13,7 @@ import io
 import os
 import zipfile
 import gdown
+import shutil
 
 app = FastAPI(title="Plant Disease Classifier API")
 
@@ -28,12 +29,24 @@ MODEL_PATH = "best_plant_text_classifier"
 ZIP_FILE = "best_plant_text_classifier.zip"
 DRIVE_FILE_ID = "1rYemMnyjMKfadvdlWRBBiCT-D8xQhui-" 
 
-if not os.path.exists(MODEL_PATH):
+# Agar config file missing hai toh fresh download chalega (chahe khali folder pehle se bana ho)
+if not os.path.exists(os.path.join(MODEL_PATH, "config.json")):
+    print("Downloading trained model from Google Drive...")
+    
+    # Purana koi khali ya corrupted folder ho toh use clean karega
+    if os.path.exists(MODEL_PATH):
+        shutil.rmtree(MODEL_PATH, ignore_errors=True)
+        
     url = f'https://drive.google.com/uc?id={DRIVE_FILE_ID}'
     gdown.download(url, ZIP_FILE, quiet=False)
+    
+    print("Unzipping model folder...")
     with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
         zip_ref.extractall(".")
-    os.remove(ZIP_FILE)  
+        
+    if os.path.exists(ZIP_FILE):
+        os.remove(ZIP_FILE)  
+    print("Model folder is ready!")
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 text_model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
