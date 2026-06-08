@@ -1,96 +1,37 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import numpy as np
 from PIL import Image
 from torchvision import transforms
 import json
 import io
 import os
-import zipfile
-import gdown
-import shutil
 
-app = FastAPI(title="Plant Disease Classifier API")
+app = FastAPI(title="Plant Disease Classifier API (Image Only)")
 
+# CORS Middleware setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],  # Frontend se connect karne ke liye ise "*" kar diya hai
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-MODEL_PATH = "best_plant_text_classifier"
-ZIP_FILE = "best_plant_text_classifier.zip"
-DRIVE_FILE_ID = "1rYemMnyjMKfadvdlWRBBiCT-D8xQhui-" 
-
-# Agar config file missing hai toh fresh download chalega (chahe khali folder pehle se bana ho)
-if not os.path.exists(os.path.join(MODEL_PATH, "config.json")):
-    print("Downloading trained model from Google Drive...")
-    
-    # Purana koi khali ya corrupted folder ho toh use clean karega
-    if os.path.exists(MODEL_PATH):
-        shutil.rmtree(MODEL_PATH, ignore_errors=True)
-        
-    url = f'https://drive.google.com/uc?id={DRIVE_FILE_ID}'
-    gdown.download(url, ZIP_FILE, quiet=False)
-    
-    print("Unzipping model folder...")
-    with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
-        zip_ref.extractall(".")
-        
-    if os.path.exists(ZIP_FILE):
-        os.remove(ZIP_FILE)  
-    print("Model folder is ready!")
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-text_model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
-text_model.eval()
 
 with open("recommendations.json", "r") as f:
     recommendations = json.load(f)
-
 normalized_recommendations = {k.lower().strip(): v for k, v in recommendations.items()}
-
-class TextInput(BaseModel):
-    text: str
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-@app.post("/predict_text")
-def predict_text(input_data: TextInput):
-    inputs = tokenizer(input_data.text, return_tensors="pt", truncation=True, padding=True)
-
-    with torch.no_grad():
-        outputs = text_model(**inputs)
-        probs = F.softmax(outputs.logits, dim=-1)
-
-    pred_idx = torch.argmax(probs, dim=-1).item()
-    confidence = probs[0][pred_idx].item()
-
-    if hasattr(text_model.config, 'id2label') and pred_idx in text_model.config.id2label:
-        pred_label = text_model.config.id2label[pred_idx].strip()
-    else:
-        pred_label = str(pred_idx)
-
-    rec = normalized_recommendations.get(pred_label.lower(), "No recommendation available.")
-
-    return {
-        "predicted_class": pred_label,
-        "confidence": round(confidence * 100, 2),
-        "recommendation": rec
-    }
 
 IMG_MODEL_PATH = "plant_cnn.pth"
 CLASS_MAPPING_PATH = "class_mapping.json"
 
+with open(CLASS_MAPPING_PATH, "r") as f:
+    idx_to_class = json.load(f)
+
+# CNN Model Architecture
 class PlantCNN(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -105,7 +46,7 @@ class PlantCNN(nn.Module):
         self.pool = nn.MaxPool2d(2, 2)
         self.dropout = nn.Dropout(0.5)
         self.fc1 = nn.Linear(256 * 8 * 8, 512)
-        self.fc2 = nn.Linear(512, 38)
+        self.fc2 = nn.Linear(512, num_classes)
 
     def forward(self, x):
         x = self.pool(F.relu(self.bn1(self.conv1(x))))
@@ -118,10 +59,8 @@ class PlantCNN(nn.Module):
         x = self.fc2(x)
         return x
 
-with open(CLASS_MAPPING_PATH, "r") as f:
-    idx_to_class = json.load(f)
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 img_model = PlantCNN(len(idx_to_class)).to(device)
 img_model.load_state_dict(torch.load(IMG_MODEL_PATH, map_location=device))
@@ -131,6 +70,10 @@ transform = transforms.Compose([
     transforms.Resize((128, 128)),
     transforms.ToTensor()
 ])
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 @app.post("/predict_image")
 def predict_image(file: UploadFile = File(...)):
