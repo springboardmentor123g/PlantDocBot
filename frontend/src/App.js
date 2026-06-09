@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import TextUpload from "./components/TextUpload";
-import ImageUpload from "./components/ImageUpload";
+import ImageUpload from "./components/ImageUpload"; // TextUpload ka import hata diya ✂️
 import "./App.css";
 
 export default function App() {
@@ -13,13 +12,8 @@ export default function App() {
       <h1 className="title">Plant Disease Detector</h1>
 
       <div className="upload-section">
+        {/* Sirf ImageUpload rakha hai, text box gayab! */}
         <ImageUpload
-          setPrediction={setPrediction}
-          setConfidence={setConfidence}
-          setRecommendation={setRecommendation}
-        />
-
-        <TextUpload
           setPrediction={setPrediction}
           setConfidence={setConfidence}
           setRecommendation={setRecommendation}
@@ -27,10 +21,10 @@ export default function App() {
       </div>
 
       <div className="result-box">
-        <h2>Prediction Result</h2>
-        <p><b>Disease:</b> {prediction}</p>
-        <p><b>Confidence:</b> {confidence}%</p>
-        <p><b>Recommendation:</b> {recommendation}</p>
+        <h3>Prediction Result</h3>
+        <p><b>Disease:</b> {prediction || "No prediction yet"}</p>
+        <p><b>Confidence:</b> {confidence ? `${confidence}%` : "0%"}</p>
+        <p><b>Recommendation:</b> {recommendation || "Upload an image to see recommendations."}</p>
       </div>
     </div>
   );
