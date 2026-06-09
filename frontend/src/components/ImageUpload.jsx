@@ -7,8 +7,10 @@ export default function ImageUpload({ setPrediction, setConfidence, setRecommend
 
   const handleFile = (e) => {
     const selected = e.target.files[0];
-    setImage(URL.createObjectURL(selected));
-    setFile(selected);
+    if (selected) {
+      setImage(URL.createObjectURL(selected));
+      setFile(selected);
+    }
   };
 
   const handlePredict = async () => {
@@ -18,16 +20,29 @@ export default function ImageUpload({ setPrediction, setConfidence, setRecommend
     const formData = new FormData();
     formData.append("file", file);
 
-    let res = await fetch("http://127.0.0.1:8000/predict_image", {
-      method: "POST",
-      body: formData,
-    });
+    try {
+      
+      let res = await fetch("https://plantdocbot-1-wo2l.onrender.com/predict_image", {
+        method: "POST",
+        body: formData,
+      });
 
-    let data = await res.json();
-    setPrediction(data.predicted_class);
-    setConfidence(data.confidence);
-    setRecommendation(data.recommendation);
-    setLoading(false);
+      if (!res.ok) {
+        throw new Error("Server response mein error hai");
+      }
+
+      let data = await res.json();
+      setPrediction(data.predicted_class);
+      setConfidence(data.confidence);
+      setRecommendation(data.recommendation);
+    } catch (error) {
+      console.error("Prediction fail ho gayi:", error);
+      setPrediction("Error connecting to server");
+      setConfidence("0");
+      setRecommendation("Please try again later.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
